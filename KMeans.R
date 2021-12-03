@@ -1,6 +1,8 @@
 # Euclidean distance: https://www.analyticsvidhya.com/blog/2020/02/4-types-of-distance-metrics-in-machine-learning/
 
 library(clue)
+library(fossil)
+#library(MASS)
 library(ggplot2)
 
 # Calculate Euclidean distance for n-dimensions
@@ -105,12 +107,14 @@ iris_metadata <- iris[, "Species"]
 iris_pca <- prcomp(iris_features, center = TRUE, scale. = TRUE)$x
 row.names(iris_pca) <- row.names(iris)
 
+iris_pca <- iris_pca[,c(1,2)]
+
 # Run k-means clustering
-clusters <- k_means(iris_pca, max_iterations = 50)
+kmean_clusters <- k_means(iris_pca, max_iterations = 50)
 
 iris_pca_clusters <- data.frame(iris_pca)
 iris_pca_clusters$label <- iris_metadata
-iris_pca_clusters$kmeans <- clusters
+iris_pca_clusters$kmeans <- kmean_clusters
 
 ggplot(iris_pca_clusters, aes(x = PC1, y = PC2, color = kmeans, shape = label)) +
   geom_point(size = 2) +
@@ -142,6 +146,15 @@ clusterLabelMatch <- function(labels, predictions) {
   return(assignment_map)
 }
 
-as <- clusterLabelMatch(iris_metadata, clusters)
+kmean_map <- clusterLabelMatch(iris_metadata, kmean_clusters)
 
+convertTruth <- function(labels, label_to_cluster_map) {
+  unlist(lapply(labels, function(x) label_to_cluster_map[[x]]))
+}
 
+kmeans_truth <- convertTruth(iris_metadata, kmean_map)
+
+kmeans_adj_rand <- adj.rand.index(kmeans_truth, kmean_clusters)
+kmeans_adj_rand
+
+# sammon(dist(t(iris_features)))
