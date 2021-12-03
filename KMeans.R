@@ -1,0 +1,147 @@
+# Euclidean distance: https://www.analyticsvidhya.com/blog/2020/02/4-types-of-distance-metrics-in-machine-learning/
+
+library(clue)
+library(ggplot2)
+
+# Calculate Euclidean distance for n-dimensions
+calculateEuclidean <- function(p1, p2) {
+  # Add the squared difference of each dimension in both points
+  total <- 0
+  
+  for (i in 1:length(names(p1))) {
+    total <- total + ((p1[i] - p2[i]) ** 2)
+  }
+  
+  # Square root the summed difference
+  euclidean_dist <- unname(sqrt(total))
+  
+  return(euclidean_dist)
+}
+
+formatClusterResults <- function(centroid_assignments, points) {
+  # Add a columns to the results of cluster assignment
+  for (i in 1:length(centroid_assignments)) {
+    cluster_points_df <- data.frame(centroid_assignments[[i]])
+    cluster_points_df$cluster <- i
+    centroid_assignments[[i]] <- cluster_points_df
+  }
+  
+  results <- do.call("rbind", centroid_assignments)
+  
+  if (is.null(row.names(points))) {
+    row.names(results) <- 1:nrow(results)
+  } else {
+    row.names(results) <- row.names(points)
+  }
+  
+  return(results)
+}
+
+# K-means clustering algorithm
+k_means <- function(points, k = 3, max_iterations = 100) {
+  # Randomly initialize k centroids
+  centroids <- points[sample(1:nrow(points), k), ]
+  
+  # Optimize centers up to n times
+  for (i in 1:max_iterations) {
+    # Initialize list to record points assigned to each centroid
+    centroid_assignments <- vector("list", length = k)
+    point_clusters <- c()
+    
+    # For each point, find its closest centroid
+    for (p in 1:nrow(points)) {
+      point <- points[p,]
+      
+      min_dist <- Inf
+      best_centroid <- NA
+      
+      # Test each centroid
+      for (c in 1:k) {
+        centroid <- centroids[c,]
+        # Calculate Euclidean distance between point and centroid
+        euclidean <- calculateEuclidean(point, centroid)
+        
+        # If point is closest to this centroid than previous attempts, record the centroid
+        if (euclidean < min_dist) {
+          min_dist <- euclidean
+          best_centroid <- c
+        }
+      }
+      
+      # Add the point's coordinates to its best centroid
+      if (is.null(centroid_assignments[best_centroid][[1]])) {
+        centroid_assignments[[best_centroid]] <- point
+      } else {
+        centroid_assignments[[best_centroid]] <- rbind(centroid_assignments[[best_centroid]], point)
+      }
+      
+      point_clusters <- c(point_clusters, best_centroid)
+    }
+    
+    # Record current centroid assignment
+    centroids_old <- centroids
+    
+    # Calculate new centroids
+    for (c in 1:k) {
+      centroids[c,] <- colMeans(centroid_assignments[[c]])
+    }
+    
+    # If centroids are the same, algorithm has converged so stop
+    if (identical(centroids, centroids_old)) {
+      return(as.factor(point_clusters))
+      #return(formatClusterResults(centroid_assignments, points))
+    }
+  }
+  
+  return(as.factor(point_clusters))
+  #return(formatClusterResults(centroid_assignments, points))
+}
+
+# Extract features and metadata
+iris_features <- iris[, !names(iris) %in% c("Species")]
+iris_metadata <- iris[, "Species"]
+
+# Run principal component analysis with normalization
+iris_pca <- prcomp(iris_features, center = TRUE, scale. = TRUE)$x
+row.names(iris_pca) <- row.names(iris)
+
+# Run k-means clustering
+clusters <- k_means(iris_pca, max_iterations = 50)
+
+iris_pca_clusters <- data.frame(iris_pca)
+iris_pca_clusters$label <- iris_metadata
+iris_pca_clusters$kmeans <- clusters
+
+ggplot(iris_pca_clusters, aes(x = PC1, y = PC2, color = kmeans, shape = label)) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("#fc8021", "#462cc7", "#3ab03a")) +
+  labs(title = "K-Means Clustering")
+
+# Find the best mapping between labels and predicted clusters using the Hungarian matching algorithm
+clusterLabelMatch <- function(labels, predictions) {
+  n_clusters <- length(levels(predictions))
+  n_samples <- length(predictions)
+  
+  # Construct a bipartite graph via an adjacency matrix
+  bipartite_graph <- matrix(0, n_clusters, n_clusters)
+  
+  for (i in 1:n_samples) {
+    # Add 1 for every intersection between rows and columns
+    bipartite_graph[predictions[i], labels[i]] <- bipartite_graph[predictions[i], labels[i]] + 1
+  }
+  # Solve the linear sum assignment problem through the Hungarian method
+  best_assignment <- solve_LSAP(max(bipartite_graph) - bipartite_graph, maximum = FALSE)
+  
+  # Create a list mapping labels to cluster predictions
+  assignment_map <- list() 
+  
+  for (j in 1:length(best_assignment)) {
+    assignment_map[levels(labels)[best_assignment[j]]] <- j
+  }
+  
+  return(assignment_map)
+}
+
+as <- clusterLabelMatch(iris_metadata, clusters)
+
+
