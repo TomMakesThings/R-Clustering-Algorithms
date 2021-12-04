@@ -2,7 +2,6 @@
 
 library(clue)
 library(fossil)
-#library(MASS)
 library(ggplot2)
 
 # Calculate Euclidean distance for n-dimensions
@@ -91,13 +90,60 @@ k_means <- function(points, k = 3, max_iterations = 100) {
     # If centroids are the same, algorithm has converged so stop
     if (identical(centroids, centroids_old)) {
       return(as.factor(point_clusters))
-      #return(formatClusterResults(centroid_assignments, points))
     }
   }
   
   return(as.factor(point_clusters))
-  #return(formatClusterResults(centroid_assignments, points))
 }
+
+# Bottom up hierarchical clustering
+agglomerativeClustering <- function(points, n_clusters = 3) {
+  # Initialise list to store clusters
+  clusters <- list()
+  
+  # Set each point as a new cluster
+  for (i in 1:nrow(points)) {
+    clusters[[i]] <- data.frame(t(points[i,]))
+    clusters[[i]]$id <- i
+  }
+  
+  # Set the cluster index names
+  names(clusters) <- paste("cluster", 1:length(clusters), sep = "_")
+  
+  # Create dataframe of average cluster positions
+  cluster_averages <- do.call(rbind.data.frame, clusters)
+  cluster_averages$id <- NULL
+  
+  #return(cluster_averages)
+  
+  # Iteratively use average group linkage to merge clusters
+  for (j in 1:(nrow(points) - n_clusters)) {
+    # Calculate Euclidean distance between every cluster
+    average_cluster_dist <- as.matrix(dist(cluster_averages))
+    # Set distance matrix diagonal to infinity to stop any cluster being compare to itself
+    diag(average_cluster_dist) <- Inf
+    # Find the two clusters with the smallest distance
+    min_idx <- arrayInd(which.min(average_cluster_dist), dim(average_cluster_dist))
+    cluster_1 <- rownames(average_cluster_dist)[min_idx[1]]
+    cluster_2 <- rownames(average_cluster_dist)[min_idx[2]]
+
+    # Merge both into the first cluster
+    clusters[[cluster_1]] <- rbind(clusters[[cluster_1]], clusters[[cluster_2]])
+    # Remove the second cluster
+    clusters[[cluster_2]] <- NULL
+    cluster_averages <- cluster_averages[-c(min_idx[2]),]
+
+    print("now")
+    print(clusters[cluster_1])
+    print(clusters[cluster_2])
+    
+    # Update the center point of the combined cluster
+    cluster_averages[cluster_1,] <- colMeans(clusters[[cluster_1]][1:(ncol(clusters[[cluster_1]])-1)])
+  }
+  
+  return(clusters)
+}
+
 
 # Extract features and metadata
 iris_features <- iris[, !names(iris) %in% c("Species")]
@@ -111,6 +157,19 @@ iris_pca <- iris_pca[,c(1,2)]
 
 # Run k-means clustering
 kmean_clusters <- k_means(iris_pca, max_iterations = 50)
+
+# Run agglomerative hierarchical clustering
+hierarchical_clusters <- agglomerativeClustering(iris_pca)
+
+
+clusters <- lapply(clusters, function(x) split(x, 2, 1:length(clusters)))
+clusters <- lapply(clusters, function(x) setNames(x, "points"))
+
+for (c in 1:length(hierarchical_clusters)) {
+  # Calculate average inter-cluster distance
+  hierarchical_clusters[[c]]$average_dist <- calculateEuclidean(hierarchical_clusters[[c]]$point,
+                                                                hierarchical_clusters[[c]]$point)
+}
 
 iris_pca_clusters <- data.frame(iris_pca)
 iris_pca_clusters$label <- iris_metadata
@@ -156,5 +215,3 @@ kmeans_truth <- convertTruth(iris_metadata, kmean_map)
 
 kmeans_adj_rand <- adj.rand.index(kmeans_truth, kmean_clusters)
 kmeans_adj_rand
-
-# sammon(dist(t(iris_features)))
