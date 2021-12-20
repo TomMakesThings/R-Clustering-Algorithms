@@ -1,8 +1,11 @@
 # Euclidean distance: https://www.analyticsvidhya.com/blog/2020/02/4-types-of-distance-metrics-in-machine-learning/
+# https://towardsdatascience.com/the-5-clustering-algorithms-data-scientists-need-to-know-a36d136ef68
 
+library(dplyr)
 library(clue)
 library(fossil)
 library(ggplot2)
+library(clValid)
 
 # Calculate Euclidean distance for n-dimensions
 calculateEuclidean <- function(p1, p2) {
@@ -96,7 +99,7 @@ k_means <- function(points, k = 3, max_iterations = 100) {
   return(as.factor(point_clusters))
 }
 
-# Bottom up hierarchical clustering
+# Bottom-up hierarchical clustering
 agglomerativeClustering <- function(points, n_clusters = 3) {
   # Initialise list to store clusters
   clusters <- list()
@@ -155,6 +158,90 @@ agglomerativeClustering <- function(points, n_clusters = 3) {
   return(results)
 }
 
+# Density-Based spatial clustering of applications with noise (DBSCAN)
+DBSCAN <- function(points, epsilon, min_points) {
+  # Initialise list to store all clusters and points assigned as noise
+  clusters <- list()
+  noise <- NULL
+  
+  # Randomly select a point to form the first cluster
+  shuffled_points <- sample_n(data.frame(points), nrow(points))
+  current_cluster <- NULL
+  new_points <- NULL
+  previous_points <- shuffled_points[1,]
+  remaining_points <- shuffled_points[2:nrow(shuffled_points),]
+
+  # Iterate until all points are classified into clusters or noise
+  while (nrow(remaining_points) > 0) {
+    
+    # Compare newly clustered points to those unclustered
+    for (x in 1:nrow(previous_points)) {
+      point_1 <- previous_points[x,]
+      for (y in 1:nrow(remaining_points)) {
+        point_2 <- remaining_points[y,]
+        
+        # Check the point has not yet been added
+        if (!(rownames(point_2) %in% rownames(new_points))) {
+          # Calculate Euclidean distance between the two points
+          euclidean <- calculateEuclidean(point_1, point_2)[,]
+          
+          # Check if the distance is less than the threshold epsilon
+          if (euclidean < epsilon) {
+            # If so, record the point to be added to the cluster
+            if (is.null(new_points)) {
+              new_points <- point_2
+            } else {
+              new_points <- rbind(new_points, point_2)
+            }
+          }
+        }
+      }
+    }
+    
+    # Add previously discovered points to the current cluster
+    if (is.null(current_cluster)) {
+      current_cluster <- previous_points
+    } else {
+      current_cluster <- rbind(current_cluster, previous_points)
+    }
+
+    # Check if any new points were clustered
+    if (!is.null(new_points)) {
+
+      # Update remaining unclassified points by removing newly clustered points
+      remaining_rows <- rownames(remaining_points)[!rownames(remaining_points) %in% rownames(new_points)]
+      remaining_points <- remaining_points[remaining_rows,]
+      
+      # Reset point placeholders
+      previous_points <- new_points
+      new_points <- NULL
+      
+    } else {
+      
+      # If no new points clustered, check if current cluster has n points or more
+      if (nrow(current_cluster) >= min_points) {
+        # If so, record the cluster
+        clusters <- append(clusters, list(current_cluster))
+      } else {
+        # Otherwise, label the points as noise
+        if (is.null(noise)) {
+          noise <- current_cluster
+        } else {
+          noise <- rbind(noise, current_cluster)
+        }
+      }
+      
+      # Reset variables
+      current_cluster <- NULL
+      new_points <- NULL
+      previous_points <- remaining_points[1,]
+      remaining_points <- remaining_points[!(row.names(remaining_points) %in% rownames(previous_points)),]
+    }
+  }
+  
+  return(list(clusters, noise))
+}
+
 # Extract features and metadata
 iris_features <- iris[, !names(iris) %in% c("Species")]
 iris_metadata <- iris[, "Species"]
@@ -163,14 +250,15 @@ iris_metadata <- iris[, "Species"]
 iris_pca <- prcomp(iris_features, center = TRUE, scale. = TRUE)$x
 row.names(iris_pca) <- row.names(iris)
 
-#iris_pca <- iris_pca[,c(1,2)]
-
 # Run k-means clustering
 kmean_clusters <- k_means(iris_pca, max_iterations = 50)
 
 # Run agglomerative hierarchical clustering
 hierarchical_results <- agglomerativeClustering(iris_pca)
 hierarchical_clusters <- hierarchical_results$clusters
+
+# Run DBSCAN clustering
+dbscan <- DBSCAN(iris_pca, 0.6, 3)
 
 # Find the best mapping between labels and predicted clusters using the Hungarian matching algorithm
 clusterLabelMatch <- function(labels, predictions) {
@@ -227,5 +315,3 @@ ggplot(iris_pca_clusters, aes(x = PC1, y = PC2, color = hierarchical, shape = la
   scale_color_manual(values = c("#fc8021", "#462cc7", "#3ab03a")) +
   labs(title = paste("Agglomerative Hierarchical Clustering - ARI",
                      signif(hierarchical_adj_rand, 3)))
-
-dunn(distance = NULL, kmean_clusters, Data = NULL, method = "euclidean")
