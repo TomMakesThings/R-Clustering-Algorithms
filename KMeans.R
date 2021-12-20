@@ -110,11 +110,15 @@ agglomerativeClustering <- function(points, n_clusters = 3) {
   # Set the cluster index names
   names(clusters) <- paste("cluster", 1:length(clusters), sep = "_")
   
+  # Create list of cluster assignment per points
+  point_clusters <- paste("cluster", 1:length(clusters), sep = "_")
+  names(point_clusters) <- rownames(points)
+  
+  distances <- c()
+  
   # Create dataframe of average cluster positions
   cluster_averages <- do.call(rbind.data.frame, clusters)
   cluster_averages$id <- NULL
-  
-  #return(cluster_averages)
   
   # Iteratively use average group linkage to merge clusters
   for (j in 1:(nrow(points) - n_clusters)) {
@@ -126,24 +130,30 @@ agglomerativeClustering <- function(points, n_clusters = 3) {
     min_idx <- arrayInd(which.min(average_cluster_dist), dim(average_cluster_dist))
     cluster_1 <- rownames(average_cluster_dist)[min_idx[1]]
     cluster_2 <- rownames(average_cluster_dist)[min_idx[2]]
+    
+    distances <- c(distances, min(average_cluster_dist))
 
     # Merge both into the first cluster
     clusters[[cluster_1]] <- rbind(clusters[[cluster_1]], clusters[[cluster_2]])
+    
+    # Update cluster assignment of each point
+    for (p in 1:nrow(clusters[[cluster_2]])) {
+      point_clusters[clusters[[cluster_2]][p,]$id] <- cluster_1
+    }
+    
     # Remove the second cluster
     clusters[[cluster_2]] <- NULL
     cluster_averages <- cluster_averages[-c(min_idx[2]),]
-
-    print("now")
-    print(clusters[cluster_1])
-    print(clusters[cluster_2])
     
     # Update the center point of the combined cluster
     cluster_averages[cluster_1,] <- colMeans(clusters[[cluster_1]][1:(ncol(clusters[[cluster_1]])-1)])
   }
   
-  return(clusters)
+  results <- list(clusters = factor(as.numeric(factor(unname(point_clusters)))),
+                  distances = distances)
+  
+  return(results)
 }
-
 
 # Extract features and metadata
 iris_features <- iris[, !names(iris) %in% c("Species")]
@@ -153,32 +163,14 @@ iris_metadata <- iris[, "Species"]
 iris_pca <- prcomp(iris_features, center = TRUE, scale. = TRUE)$x
 row.names(iris_pca) <- row.names(iris)
 
-iris_pca <- iris_pca[,c(1,2)]
+#iris_pca <- iris_pca[,c(1,2)]
 
 # Run k-means clustering
 kmean_clusters <- k_means(iris_pca, max_iterations = 50)
 
 # Run agglomerative hierarchical clustering
-hierarchical_clusters <- agglomerativeClustering(iris_pca)
-
-
-clusters <- lapply(clusters, function(x) split(x, 2, 1:length(clusters)))
-clusters <- lapply(clusters, function(x) setNames(x, "points"))
-
-for (c in 1:length(hierarchical_clusters)) {
-  # Calculate average inter-cluster distance
-  hierarchical_clusters[[c]]$average_dist <- calculateEuclidean(hierarchical_clusters[[c]]$point,
-                                                                hierarchical_clusters[[c]]$point)
-}
-
-iris_pca_clusters <- data.frame(iris_pca)
-iris_pca_clusters$label <- iris_metadata
-iris_pca_clusters$kmeans <- kmean_clusters
-
-ggplot(iris_pca_clusters, aes(x = PC1, y = PC2, color = kmeans, shape = label)) +
-  geom_point(size = 2) +
-  scale_color_manual(values = c("#fc8021", "#462cc7", "#3ab03a")) +
-  labs(title = "K-Means Clustering")
+hierarchical_results <- agglomerativeClustering(iris_pca)
+hierarchical_clusters <- hierarchical_results$clusters
 
 # Find the best mapping between labels and predicted clusters using the Hungarian matching algorithm
 clusterLabelMatch <- function(labels, predictions) {
@@ -206,12 +198,34 @@ clusterLabelMatch <- function(labels, predictions) {
 }
 
 kmean_map <- clusterLabelMatch(iris_metadata, kmean_clusters)
+hierarchical_map <- clusterLabelMatch(iris_metadata, hierarchical_clusters)
 
 convertTruth <- function(labels, label_to_cluster_map) {
   unlist(lapply(labels, function(x) label_to_cluster_map[[x]]))
 }
 
 kmeans_truth <- convertTruth(iris_metadata, kmean_map)
+hierarchical_map_truth <- convertTruth(iris_metadata, hierarchical_map)
 
+# Calculate adjusted Rand index
 kmeans_adj_rand <- adj.rand.index(kmeans_truth, kmean_clusters)
-kmeans_adj_rand
+hierarchical_adj_rand <- adj.rand.index(hierarchical_map_truth, hierarchical_clusters)
+
+# Create graphs
+iris_pca_clusters <- data.frame(iris_pca)
+iris_pca_clusters$label <- iris_metadata
+iris_pca_clusters$kmeans <- kmean_clusters
+iris_pca_clusters$hierarchical <- hierarchical_clusters
+
+ggplot(iris_pca_clusters, aes(x = PC1, y = PC2, color = kmeans, shape = label)) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("#fc8021", "#462cc7", "#3ab03a")) +
+  labs(title = paste("K-Means Clustering - ARI", signif(kmeans_adj_rand, 3)))
+
+ggplot(iris_pca_clusters, aes(x = PC1, y = PC2, color = hierarchical, shape = label)) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("#fc8021", "#462cc7", "#3ab03a")) +
+  labs(title = paste("Agglomerative Hierarchical Clustering - ARI",
+                     signif(hierarchical_adj_rand, 3)))
+
+dunn(distance = NULL, kmean_clusters, Data = NULL, method = "euclidean")
