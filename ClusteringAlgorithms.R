@@ -9,6 +9,7 @@ library(clValid)
 library(umap)
 library(Rtsne)
 library(gridExtra)
+library(cluster)
 
 setwd("C:/Users/redds/Documents/GitHub/Iris-Clustering")
 
@@ -92,7 +93,9 @@ k_means <- function(points, k = 3, max_iterations = 100) {
     
     # Calculate new centroids
     for (c in 1:k) {
-      centroids[c,] <- colMeans(centroid_assignments[[c]])
+      if (!is.null(centroid_assignments[[c]])) {
+        centroids[c,] <- colMeans(centroid_assignments[[c]])
+      }
     }
     
     # If centroids are the same, algorithm has converged so stop
@@ -262,11 +265,12 @@ reduceDimensions <- function(data, reduction = "pca", n_pcs = 0) {
     # UMAP dimensionality reduction
     features = umap(data)$layout
     colnames(features) <- c("UMAP1", "UMAP2")
+    
   } else if (reduction == "tsne") {
     # t-SNE dimensionality reduction
-    features <- Rtsne(distinct(data), dims = 2, perplexity = 30,
-                      max_iter = 500)$Y
+    features <- Rtsne(distinct(data), dims = 2, perplexity = 30, max_iter = 500)$Y
     colnames(features) <- c("tSNE1", "tSNE2")
+    
   } else {
     # PCA with normalization
     features <- prcomp(data, center = TRUE, scale. = TRUE)$x
@@ -281,7 +285,8 @@ reduceDimensions <- function(data, reduction = "pca", n_pcs = 0) {
   return(features)
 }
 
-# Find the best mapping between labels and predicted clusters using the Hungarian matching algorithm
+# Find the best mapping between labels and predicted clusters using the
+# Hungarian matching algorithm
 clusterLabelMatch <- function(labels, predictions) {
   n_clusters <- length(levels(predictions))
   n_samples <- length(predictions)
@@ -309,31 +314,44 @@ clusterLabelMatch <- function(labels, predictions) {
   return(list(assignment_map = assignment_map, truth_clusters = truth_clusters))
 }
 
-runClustering <- function(data, metadata, algorithm) {
+runClustering <- function(data, metadata, algorithm, epsilon = 0.8, 
+                          min_points = 3) {
   # Record time
   start_time <- proc.time()
   
-  if (algorithm == "kmeans") {
-    # Run k-means clustering
-    clusters <- k_means(data, max_iterations = 50)
+  if (algorithm == "dbscan") {
+    # Run density based clustering
+    clusters <- DBSCAN(data, epsilon, min_points)
   } else if (algorithm == "hierarchical") {
     # Run hierarchical clustering
     hierarchical_results <- agglomerativeClustering(data)
     clusters <- hierarchical_results$clusters
   } else {
-    # Run density based clustering
-    clusters <- DBSCAN(data, 1, 3)
+    # Run k-means clustering
+    clusters <- k_means(data, max_iterations = 50,
+                        k = length(levels(metadata)))
   }
   
   # Calculate run time
   run_time <- proc.time() - start_time
   
-  # Use the ground truth to find the excepted cluster assignments
-  expected_clusters <- clusterLabelMatch(metadata, clusters)$truth_clusters
-  # Calculate ARI between labels and predictions
-  adjusted_rand <- adj.rand.index(expected_clusters, clusters)
+  # # Use the ground truth to find the best matching labels to the clusters
+  # expected_clusters <- clusterLabelMatch(metadata, clusters)$truth_clusters
   
-  return(list(clusters = clusters, run_time = run_time, ari = adjusted_rand))
+  # Calculate ARI between labels and predictions
+  adjusted_rand <- adj.rand.index(as.numeric(metadata), clusters)
+  # Calculate average silhouette coefficient
+  if (algorithm == "dbscan") {
+    # Remove points classed as noise
+    silhouette_scores <- silhouette(as.numeric(clusters[which(!is.na(clusters))]),
+                                    dist(data[-which(is.na(as.numeric(clusters))),]))
+  } else {
+    silhouette_scores <- silhouette(as.numeric(clusters), dist(data))
+  }
+  average_silhouette = mean(silhouette_scores[, 3])
+  
+  return(list(clusters = clusters, run_time = run_time,
+              ari = adjusted_rand, silhouette = average_silhouette))
 }
 
 ### Iris clustering ###
@@ -347,65 +365,73 @@ iris_pca <- reduceDimensions(iris_features, reduction = "pca", n_pcs = 2)
 iris_tsne <- reduceDimensions(iris_features, reduction = "tsne")
 iris_umap <- reduceDimensions(iris_features, reduction = "umap")
 
-iris_reduction <- iris_tsne
+# Set the dimensionality reduction to use
+iris_reduction <- as.matrix(iris_features[c(1,2)])
+iris_reduction <- iris_umap
 
 iris_kmeans <- runClustering(iris_reduction, iris_metadata, algorithm = "kmeans")
 iris_hierarchical <- runClustering(iris_reduction, iris_metadata, algorithm = "hierarchical")
-iris_dbscan <- runClustering(iris_reduction, iris_metadata, algorithm = "dbscan")
+iris_dbscan <- runClustering(iris_reduction, iris_metadata, algorithm = "dbscan",
+                             epsilon = 0.8, min_points = 3)
 
 # Create graphs
-iris_pca_clusters <- data.frame(iris_reduction)
-iris_pca_clusters$label <- iris_metadata
-iris_pca_clusters$kmeans <- iris_kmeans$clusters
-iris_pca_clusters$hierarchical <- iris_hierarchical$clusters
-iris_pca_clusters$dbscan <- iris_dbscan$clusters
+iris_plot_data <- data.frame(iris_reduction)
+iris_plot_data$label <- iris_metadata
+iris_plot_data$kmeans <- iris_kmeans$clusters
+iris_plot_data$hierarchical <- iris_hierarchical$clusters
+iris_plot_data$dbscan <- iris_dbscan$clusters
 
 cluster_colours <- c("#fc8021", "#462cc7", "#3ab03a", "#ff2181", "#385df2", 
                      "#db43fa", "#5ce1ed")
 
-iris_label_plot <- ggplot(iris_pca_clusters,
-                          aes(x = get(names(iris_pca_clusters)[1]),
-                              y = get(names(iris_pca_clusters)[2]),
+iris_label_plot <- ggplot(iris_plot_data,
+                          aes(x = get(names(iris_plot_data)[1]),
+                              y = get(names(iris_plot_data)[2]),
                               color = label)) +
   geom_point(size = 2) +
-  scale_color_manual(values = cluster_colours[1:length(levels(iris_pca_clusters$kmeans))]) +
+  scale_color_manual(values = rev(cluster_colours)[1:length(levels(iris_plot_data$kmeans))]) +
   labs(title = "Iris Ground Truth", color = 'Label',
-       x = names(iris_pca_clusters[1]), y = names(iris_pca_clusters[2]))
+       x = names(iris_plot_data[1]), y = names(iris_plot_data[2]))
 
-iris_kmeans_plot <- ggplot(iris_pca_clusters,
-                           aes(x = get(names(iris_pca_clusters)[1]),
-                               y = get(names(iris_pca_clusters)[2]),
+iris_kmeans_plot <- ggplot(iris_plot_data,
+                           aes(x = get(names(iris_plot_data)[1]),
+                               y = get(names(iris_plot_data)[2]),
                                color = kmeans, shape = label)) +
   geom_point(size = 2) +
-  scale_color_manual(values = cluster_colours[1:length(levels(iris_pca_clusters$kmeans))]) +
-  labs(title = paste("K-Means - ARI", signif(kmeans_adj_rand, 3)),
-       x = names(iris_pca_clusters[1]), y = names(iris_pca_clusters[2]),
+  scale_color_manual(values = cluster_colours[1:length(levels(iris_plot_data$kmeans))]) +
+  labs(title = paste("K-Means \nSilhouette: ", signif(iris_kmeans$silhouette, 3),
+                     ", ARI: ", signif(iris_kmeans$ari, 3), sep = ""),
+       x = names(iris_plot_data[1]), y = names(iris_plot_data[2]),
        color = 'Cluster', shape = 'Ground Truth')
 
-iris_hierarchical_plot <- ggplot(iris_pca_clusters, 
-                                 aes(x = get(names(iris_pca_clusters)[1]),
-                                     y = get(names(iris_pca_clusters)[2]),
+iris_hierarchical_plot <- ggplot(iris_plot_data, 
+                                 aes(x = get(names(iris_plot_data)[1]),
+                                     y = get(names(iris_plot_data)[2]),
                                      color = hierarchical, shape = label)) +
   geom_point(size = 2) +
-  scale_color_manual(values = cluster_colours[1:length(levels(iris_pca_clusters$hierarchical))]) +
-  labs(title = paste("Agglomerative Hierarchical - ARI",
-                     signif(hierarchical_adj_rand, 3)),
-       x = names(iris_pca_clusters[1]), y = names(iris_pca_clusters[2]),
+  scale_color_manual(values = cluster_colours[1:length(levels(iris_plot_data$hierarchical))]) +
+  labs(title = paste("Agglomerative Hierarchical \n",
+                     "Silhouette: ", signif(iris_hierarchical$silhouette, 3),
+                     ", ARI: ", signif(iris_hierarchical$ari, 3), sep = ""),
+       x = names(iris_plot_data[1]), y = names(iris_plot_data[2]),
        color = 'Cluster', shape = 'Ground Truth')
 
-iris_dbscan_plot <- ggplot(iris_pca_clusters,
-                           aes(x = get(names(iris_pca_clusters)[1]),
-                               y = get(names(iris_pca_clusters)[2]),
+iris_dbscan_plot <- ggplot(iris_plot_data,
+                           aes(x = get(names(iris_plot_data)[1]),
+                               y = get(names(iris_plot_data)[2]),
                                color = dbscan, shape = label)) +
   geom_point(size = 2) +
-  scale_color_manual(values = cluster_colours[1:length(levels(iris_pca_clusters$dbscan))]) +
-  labs(title = paste("DBSCAN - ARI", signif(dbscan_adj_rand, 3)),
-       x = names(iris_pca_clusters[1]), y = names(iris_pca_clusters[2]),
+  scale_color_manual(values = cluster_colours[1:length(levels(iris_plot_data$dbscan))]) +
+  labs(title = paste("DBSCAN \nSilhouette: ", signif(iris_dbscan$silhouette, 3),
+       ", ARI: ", signif(iris_dbscan$ari, 3), sep = ""),
+       x = names(iris_plot_data[1]), y = names(iris_plot_data[2]),
        color = 'Cluster', shape = 'Ground Truth')
 
-pdf("iris_clusters.pdf", width = 8, height = 12)
-iris_plot <- grid.arrange(iris_label_plot, iris_kmeans_plot,
+grid.arrange(iris_label_plot, iris_kmeans_plot,
              iris_hierarchical_plot, iris_dbscan_plot, nrow = 2)
+
+pdf("iris_labels_raw.pdf", width = 5, height = 4)
+iris_label_plot
 dev.off()
 
 ### Mouse clustering ###
@@ -452,4 +478,33 @@ for (gene_id in rownames(count_df)) {
 }
 
 rownames(count_df) <- gene_names
+# Remove genes with all zero counts
+count_df <- count_df[rowSums(count_df != 0) > 0, ]
 
+mouse_pca <- reduceDimensions(t(count_df), reduction = "pca", n_pcs = 2)
+mouse_tsne <- reduceDimensions(t(count_df), reduction = "tsne")
+mouse_umap <- reduceDimensions(t(count_df), reduction = "umap")
+
+s = data.frame(standardize(mouse_reduction))
+
+mouse_reduction <- mouse_umap
+mouse_metadata <- factor(cell_annotation$Main_Cluster)
+
+mouse_kmeans <- runClustering(mouse_reduction, mouse_metadata, algorithm = "kmeans")
+
+mouse_plot_data <- data.frame(mouse_reduction)
+mouse_plot_data$label <- mouse_metadata
+mouse_plot_data$kmeans <- mouse_kmeans$clusters
+# mouse_plot_data$hierarchical <- iris_hierarchical$clusters
+# mouse_plot_data$dbscan <- iris_dbscan$clusters
+
+#mouse_plot_data <- mouse_plot_data[which(mouse_plot_data$PC2 < 1),]
+
+mouse_label_plot <- ggplot(mouse_plot_data,
+                          aes(x = get(names(mouse_plot_data)[1]),
+                              y = get(names(mouse_plot_data)[2]),
+                              color = label)) +
+  geom_point(size = 2) +
+  scale_color_manual(values = rev(cluster_colours)[1:length(levels(mouse_plot_data$kmeans))]) +
+  labs(title = "Iris Ground Truth", color = 'Label',
+       x = names(mouse_plot_data[1]), y = names(mouse_plot_data[2]))
