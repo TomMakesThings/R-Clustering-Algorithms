@@ -614,3 +614,46 @@ cell_label_plot_umap <- plotClusters(data = cell_plot_umap,
 pdf("cell_labels.pdf", width = 10, height = 4)
 grid.arrange(cell_label_plot_pca, cell_label_plot_umap, nrow = 1)
 dev.off()
+
+# Plot algorithm run times
+time_data <- data.frame(n_samples = rep(c(125, 250, 500, 1000, 2000), 3),
+                        time = c(0.01, 0.08, 0.14, 0.25, 0.95,
+                                 0.1, 0.17, 1.07, 6.42, 51.59,
+                                 4.45, 18.95, 79.56, 311.33, 1262.86),
+                        algorithm = c(rep(c("k-means"), 5),
+                                      rep(c("hierarchical"), 5),
+                                      rep(c("DBSCAN"), 5)))
+
+kmeans_time_data <- data.frame(n_samples = c(125, 250, 500, 1000, 2000),
+                               time = c(0.01, 0.04, 0.12, 0.25, 0.95))
+hierarchical_time_data <- data.frame(n_samples = c(125, 250, 500, 1000, 2000),
+                               time = c(0.1, 0.17, 1.07, 6.42, 51.59))
+dbscan_time_data <- data.frame(n_samples = c(125, 250, 500, 1000, 2000),
+                               time = c(4.45, 18.95, 79.56, 311.33, 1262.86))
+
+kmeans_time_plot <- ggplot(data = kmeans_time_data,
+                           aes(x = n_samples,
+                               y = time)) +
+  geom_line(color = "red") +
+  geom_point() + 
+  labs(title = "K-Means Time", x = "Number of samples",
+       y = "Time in seconds")
+hierarchical_time_plot <- ggplot(data = hierarchical_time_data,
+                                 aes(x = n_samples,
+                                     y = time)) +
+  geom_line(color = "green") +
+  geom_point() + 
+  labs(title = "Agglomerative Hierarchical Time", x = "Number of samples",
+       y = "Time in seconds")
+dbscan_time_plot <- ggplot(data = dbscan_time_data,
+                           aes(x = n_samples,
+                               y = time)) +
+  geom_line(color = "blue") +
+  geom_point() + 
+  labs(title = "DBSCAN Time", x = "Number of samples",
+       y = "Time in seconds")
+
+pdf("cell_timings.pdf", width = 10, height = 4)
+grid.arrange(kmeans_time_plot, hierarchical_time_plot,
+             dbscan_time_plot, nrow = 1)
+dev.off()
