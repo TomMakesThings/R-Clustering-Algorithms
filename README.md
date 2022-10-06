@@ -4,6 +4,8 @@ Clustering is an unsupervised machine learning that groups data points into clus
 ## Data
 The Iris dataset contains three species of flower with 50 instances of each. Samples have four features representing their sepal and petal length and width. One species is linearly separable from the others, but the other two are not linearly separable from one another.
 
+<p><img src="https://github.com/TomMakesThings/Iris-Clustering-Algorithms/blob/main/iris_features.pdf"></p>
+
 ## Clustering Algorithms
 #### K-Means
 K-means is a non-deterministic, centroid based clustering method that attempts to group similar data points into a set number of clusters k. The algorithm begins by setting k randomly placed centroids, in this case through randomly selecting k points, then iteratively optimising them until the positions converge or a max number of iterations is reached. During optimisation, the Euclidean distance between each point and each centroid is calculated to find its closest cluster. At the end of each iteration, the centroid positions are updated as the mean of their assigned points. Once convergence is reached, the cluster assignment for each point is returned.
