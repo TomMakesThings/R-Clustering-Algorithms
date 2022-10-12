@@ -1,10 +1,15 @@
-# Iris Clustering Algorithms
-Clustering is an unsupervised machine learning that groups data points into clusters by similar features. In this repository, k-means, DBSCAN and agglomerative hierarchical clustering algorithms are implemented from scratch in R and tested using the well known Iris dataset.
+# R Clustering Algorithms
+Clustering is an unsupervised machine learning technique that groups data points into clusters by similar features. This repository contains a <a href="https://github.com/TomMakesThings/R-Clustering-Algorithms/blob/main/ClusteringAlgorithms.R">script</a> in which k-means, DBSCAN and agglomerative hierarchical clustering algorithms are implemented from scratch in R. These are tested using the well known Iris dataset and scRNA-seq data by <a href="https://github.com/LuyiTian/sc_mixology">Tian et al</a>.
 
 ## Data
+
+#### Iris
 The Iris dataset contains three species of flower with 50 instances of each. Samples have four features representing their sepal and petal length and width. One species is linearly separable from the others, but the other two are not linearly separable from one another.
 
-<p><img src="https://github.com/TomMakesThings/Iris-Clustering-Algorithms/blob/main/iris_features.pdf"></p>
+<p><img src="https://github.com/TomMakesThings/R-Clustering-Algorithms/blob/assets/Images/Iris-Features.png"></p>
+
+#### Cell Line
+The scRNA-seq data consists of counts for 11,786 genes for 3,918 cell across five cancer cell lines (H838, H2228, HCC827, A549, H1975).
 
 ## Clustering Algorithms
 #### K-Means
