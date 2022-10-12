@@ -456,7 +456,7 @@ iris_umap <- reduceDimensions(iris_features, reduction = "umap")
 
 # Set the dimensionality reduction to use
 iris_reduction <- as.matrix(iris_features[c(1,2)])
-iris_reduction <- iris_pca
+iris_reduction <- iris_umap
 
 iris_kmeans <- runClustering(iris_reduction, iris_metadata, algorithm = "kmeans")
 iris_hierarchical <- runClustering(iris_reduction, iris_metadata, algorithm = "hierarchical")
@@ -500,7 +500,7 @@ grid.arrange(iris_label_plot, iris_kmeans_plot,
              iris_hierarchical_plot, iris_dbscan_plot, nrow = 2)
 
 # Save as PDF
-pdf("iris_clusters_pca.pdf", width = 10, height = 8)
+pdf("iris_clusters_umap.pdf", width = 10, height = 8)
 grid.arrange(iris_label_plot, iris_kmeans_plot,
              iris_hierarchical_plot, iris_dbscan_plot, nrow = 2)
 dev.off()
