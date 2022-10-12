@@ -8,7 +8,8 @@ library(Rtsne)
 library(gridExtra)
 library(cluster)
 
-setwd("C:/Users/redds/Documents/GitHub/Iris-Clustering")
+# Set directory to be repository containing code
+setwd("C:/Users/redds/Documents/GitHub/R-Clustering-Algorithms")
 
 # Calculate Euclidean distance for n-dimensions
 calculateEuclidean <- function(p1, p2) {
@@ -504,7 +505,7 @@ grid.arrange(iris_label_plot, iris_kmeans_plot,
              iris_hierarchical_plot, iris_dbscan_plot, nrow = 2)
 dev.off()
 
-# Plot algorithm run times
+# Plot pre-recorded algorithm run times
 time_data <- data.frame(n_samples = rep(c(25, 50, 75, 100, 125, 150), 3),
                         time = c(0, 0.01, 0.01, 0.02, 0.02, 0.03,
                                  0.01, 0.02, 0.04, 0.05, 0.07, 0.08,
@@ -514,7 +515,8 @@ time_data <- data.frame(n_samples = rep(c(25, 50, 75, 100, 125, 150), 3),
                                       rep(c("DBSCAN"), 6)))
 
 pdf("iris_timings.pdf", width = 5, height = 4)
-ggplot(data = time_data, aes(x = n_samples, y = time, color = algorithm, group = algorithm)) +
+ggplot(data = time_data, aes(x = n_samples, y = time, color = algorithm,
+                             group = algorithm)) +
   geom_line() +
   geom_point() + 
   labs(title = "Algorithm Run Time on Iris Data", x = "Number of samples",
@@ -524,8 +526,8 @@ dev.off()
 
 ### Cell line clustering ###
 
-cell_counts <- read.csv("sc_10x_5cl.count.csv.gz")
-cell_metadata <- read.csv("sc_10x_5cl.metadata.csv.gz")
+cell_counts <- read.csv("Data/sc_10x_5cl.count.csv.gz")
+cell_metadata <- read.csv("Data/sc_10x_5cl.metadata.csv.gz")
 
 # Flip the data so rows are cells (samples) and columns are genes (features)
 cell_data <- data.frame(t(cell_counts))
