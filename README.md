@@ -1,4 +1,12 @@
-# R Clustering Algorithms
+<div align="center">
+  <h1>R Clustering Algorithms</h1>
+  <img src="https://images.weserv.nl/?url=avatars.githubusercontent.com/u/61354833?v=4&h=100&w=100&fit=cover&mask=circle&maxage=7d">
+  <p><b>Code by <a href="https://github.com/TomMakesThings">TomMakesThings</a></b></p>
+  <p><b><sub>December 2021</sub></b></p>
+</div>
+
+---
+
 Clustering is an unsupervised machine learning technique that groups data points into clusters by similar features. This repository contains an <a href="https://github.com/TomMakesThings/R-Clustering-Algorithms/blob/main/ClusteringAlgorithms.R">experimental script</a> in which k-means, DBSCAN and agglomerative hierarchical clustering algorithms are implemented from scratch in R. These were tested using the well known Iris dataset and adenocarcinoma scRNA-seq data by <a href="https://github.com/LuyiTian/sc_mixology">Tian et al</a>.
 
 ## Clustering Algorithms
